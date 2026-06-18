@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>爆贴文案查重与库存管理系统</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="theme-dark">
+    <!-- background container with blur -->
+    <div id="app-bg"></div>
+    <div id="app-bg-overlay"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <header class="app-header">
+                <h1>✨ 文案库存管理</h1>
+                <p>AI 语义查重 & 智能编号</p>
+            </header>
+
+            <div class="card-group">
+                <!-- Section 1: File Setup -->
+                <div class="card-section">
+                    <h3>1. 库存数据库选择</h3>
+                    <div class="file-picker-row">
+                        <input type="text" id="inventory-path" readonly placeholder="默认创建在本地当前目录...">
+                        <button onclick="pickInventoryFile()" class="btn-picker">浏览...</button>
+                    </div>
+                </div>
+
+                <div class="card-section">
+                    <h3>2. 待比对文案表格</h3>
+                    <div class="file-picker-row">
+                        <input type="text" id="input-path" readonly placeholder="请选择新文案表格...">
+                        <button onclick="pickInputFile()" class="btn-picker">选择文件...</button>
+                    </div>
+                </div>
+
+                <div class="card-section col-prefix-grid">
+                    <div>
+                        <label>文案内容列:</label>
+                        <select id="column-select" disabled>
+                            <option>第一列 (默认)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>分配编号前缀:</label>
+                        <input type="text" id="prefix-input" value="CPY_" placeholder="CPY_" onchange="saveCurrentSettings()">
+                    </div>
+                </div>
+
+                <!-- Section 2: Algorithm Settings -->
+                <div class="card-section">
+                    <h3>3. 匹配算法配置</h3>
+                    <label>比对模式:</label>
+                    <select id="mode-select" onchange="onModeChange()">
+                        <option value="tfidf">字面查重 (TF-IDF)</option>
+                        <option value="semantic">AI 语义查重 (Sentence Transformers)</option>
+                    </select>
+
+                    <div class="slider-row">
+                        <span id="threshold-val">相似度阈值: 80%</span>
+                        <input type="range" id="threshold-slider" min="40" max="100" value="80" oninput="onThresholdChange(this.value)" onchange="saveCurrentSettings()">
+                    </div>
+                    
+                    <div class="info-bubble" id="info-bubble">
+                        📖 字面查重说明:<br>1. 采用 TF-IDF 字符分析和余弦相似度算法。<br>2. 适合拼写极其相似的文案比对，速度极快。
+                    </div>
+                </div>
+
+                <!-- Section 3: Aesthetics -->
+                <div class="card-section">
+                    <h3>🎨 界面皮肤与背景定制</h3>
+                    
+                    <label>预设皮肤:</label>
+                    <div class="theme-picker">
+                        <div class="theme-dot theme-dot-dark active" onclick="setTheme('dark')" title="深邃暗黑"></div>
+                        <div class="theme-dot theme-dot-light" onclick="setTheme('light')" title="纯白晶莹"></div>
+                        <div class="theme-dot theme-dot-cyberpunk" onclick="setTheme('cyberpunk')" title="赛博朋克"></div>
+                        <div class="theme-dot theme-dot-sakura" onclick="setTheme('sakura')" title="浪漫樱花"></div>
+                        <div class="theme-dot theme-dot-mint" onclick="setTheme('mint')" title="薄荷淡绿"></div>
+                    </div>
+
+                    <div class="custom-bg-row">
+                        <div>
+                            <label>自定义背景:</label>
+                            <button onclick="triggerBgUpload()" class="btn-picker btn-small">上传图片</button>
+                            <input type="file" id="bg-uploader" accept="image/*" style="display: none;" onchange="loadCustomBg(this)">
+                        </div>
+                        <div>
+                            <label>恢复默认:</label>
+                            <button onclick="resetDefaultBg()" class="btn-picker btn-small">还原背景</button>
+                        </div>
+                    </div>
+
+                    <div class="slider-row">
+                        <span id="blur-val">背景模糊度: 10px</span>
+                        <input type="range" id="blur-slider" min="0" max="30" value="10" oninput="onBlurChange(this.value)" onchange="saveCurrentSettings()">
+                    </div>
+                    
+                    <div class="slider-row">
+                        <span id="opacity-val">面板不透明度: 75%</span>
+                        <input type="range" id="opacity-slider" min="20" max="100" value="75" oninput="onOpacityChange(this.value)" onchange="saveCurrentSettings()">
+                    </div>
+                </div>
+            </div>
+
+            <button id="btn-run" class="btn-primary" onclick="startProcessing()">🚀 开始比对处理</button>
+        </aside>
+
+        <!-- Main Panel -->
+        <main class="main-content">
+            <header class="status-bar">
+                <div class="status-text-row">
+                    <span id="status-title">⏳ 准备就绪，等待导入数据...</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div id="progress-bar-fill"></div>
+                </div>
+            </header>
+
+            <!-- Stats -->
+            <section class="stats-container">
+                <div class="stat-card">
+                    <span class="stat-label">待处理总数</span>
+                    <span class="stat-value" id="stat-total">0</span>
+                </div>
+                <div class="stat-card color-matched">
+                    <span class="stat-label">已匹配沿用 ID</span>
+                    <span class="stat-value" id="stat-matched">0</span>
+                </div>
+                <div class="stat-card color-new">
+                    <span class="stat-label">新增库存 ID</span>
+                    <span class="stat-value" id="stat-new">0</span>
+                </div>
+            </section>
+
+            <!-- Table -->
+            <section class="table-container">
+                <table class="result-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 70px;">序号</th>
+                            <th>新文案内容</th>
+                            <th style="width: 150px;">匹配状态</th>
+                            <th style="width: 100px;">最大相似度</th>
+                            <th>库中匹配原句</th>
+                            <th style="width: 120px;">分配编号</th>
+                        </tr>
+                    </thead>
+                    <tbody id="result-tbody">
+                        <tr class="empty-placeholder">
+                            <td colspan="6">暂无预览数据，导入文件比对后在此显示前 200 条预览记录</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Bottom status -->
+            <footer class="footer-bar">
+                <span id="output-filepath"></span>
+                <button id="btn-open-folder" class="btn-secondary" onclick="openOutputFolder()" disabled>📂 打开输出文件夹</button>
+            </footer>
+        </main>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>

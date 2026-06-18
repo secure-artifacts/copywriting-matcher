@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller
+# We do NOT ignore *.spec files because they are required for CI build
+build/
+build_folder/
+dist/
+dist_folder/
+dist_final/
+local_build/
+
+# User configurations & Local Data
+app_settings.json
+custom_background.dat
+*.xlsx
+!文案库存.xlsx
+
+# Test files
+test_temp/
+verify_inventory.xlsx
+verify_input.xlsx
+verify_result.xlsx
+
+# Environments
+.env
+.env.*
+.venv
+venv/
+ENV/
+env/
+
+# IDEs
+.idea/
+.vscode/
+.gemini/
