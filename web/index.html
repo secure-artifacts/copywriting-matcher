@@ -5,6 +5,34 @@
     <title>爆贴文案查重与库存管理系统</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* 强制覆盖间距，解决 WebView 强缓存问题 */
+        .sidebar {
+            width: 420px !important;
+            min-width: 420px !important;
+        }
+        .input-field-row {
+            display: flex !important;
+            flex-direction: column !important;
+            margin-bottom: 14px !important;
+        }
+        .input-field-row:last-child {
+            margin-bottom: 0 !important;
+        }
+        .input-field-row label {
+            margin: 8px 0 6px 0 !important;
+        }
+        .btn-picker-fixed {
+            width: 76px !important;
+            flex-shrink: 0 !important;
+            text-align: center !important;
+            padding: 0 !important;
+        }
+        .field-spacer-fixed {
+            width: 76px !important;
+            flex-shrink: 0 !important;
+        }
+    </style>
 </head>
 <body class="theme-dark">
     <!-- background container with blur -->
@@ -20,33 +48,213 @@
             </header>
 
             <div class="card-group">
+                <!-- Section 0: Google Credentials -->
+                <div class="card-section">
+                    <h3>🔑 谷歌表格授权凭证</h3>
+                    <div class="file-picker-row">
+                        <input type="text" id="google-creds-path" readonly placeholder="请选择谷歌服务账号凭证 JSON 文件...">
+                        <button onclick="pickGoogleCredsFile()" class="btn-picker btn-picker-fixed">选择...</button>
+                    </div>
+                </div>
+
                 <!-- Section 1: File Setup -->
                 <div class="card-section">
                     <h3>1. 库存数据库选择</h3>
-                    <div class="file-picker-row">
-                        <input type="text" id="inventory-path" readonly placeholder="默认创建在本地当前目录...">
-                        <button onclick="pickInventoryFile()" class="btn-picker">浏览...</button>
+                    <div class="library-type-tabs">
+                        <button id="tab-local-lib" class="tab-btn active" onclick="switchLibraryType('local')">本地文案库</button>
+                        <button id="tab-google-lib" class="tab-btn" onclick="switchLibraryType('google')">网络文案库</button>
+                    </div>
+                    
+                    <div id="local-library-group" class="library-group">
+                        <div class="file-picker-row">
+                            <input type="text" id="inventory-path" readonly placeholder="默认创建在本地当前目录...">
+                            <button onclick="pickInventoryFile()" class="btn-picker btn-picker-fixed">浏览...</button>
+                        </div>
+                    </div>
+                    
+                    <div id="google-library-group" class="library-group" style="display: none;">
+                        <div class="input-field-row">
+                            <label>谷歌表格链接 (Google Sheets URL):</label>
+                            <div class="file-picker-row">
+                                <input type="text" id="google-sheet-url" placeholder="https://docs.google.com/spreadsheets/d/..." onchange="saveCurrentSettings()">
+                                <button onclick="verifyAndLoadInventorySheets()" class="btn-picker btn-picker-fixed">⚡ 刷新</button>
+                            </div>
+                        </div>
+                        <div class="input-field-row">
+                            <label>子工作表名称 (可选择):</label>
+                            <div class="file-picker-row">
+                                <select id="google-sheet-name-select" onchange="onGoogleSheetNameSelectChange()">
+                                    <option value="">第一张工作表 (默认)</option>
+                                </select>
+                                <div class="field-spacer-fixed"></div>
+                            </div>
+                        </div>
+                        <button id="btn-verify-inv-google" onclick="verifyAndLoadInventorySheets()" class="btn-picker btn-small" style="margin-top: 10px; width: 100%; height: 34px; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.3); color: var(--text-primary); font-weight: 500; border-radius: 8px;">🔍 验证库存连接 & 加载工作表</button>
+                    </div>
+                </div>
+
+                <!-- Section 2: Input File Setup -->
+                <div class="card-section">
+                    <h3>2. 待比对文案表格</h3>
+                    <div class="library-type-tabs">
+                        <button id="tab-local-input" class="tab-btn active" onclick="switchInputType('local')">本地表格文件</button>
+                        <button id="tab-google-input" class="tab-btn" onclick="switchInputType('google')">网络表格 (Google Sheets)</button>
+                    </div>
+
+                    <div id="local-input-group" class="library-group">
+                        <div class="file-picker-row">
+                            <input type="text" id="input-path" readonly placeholder="请选择新文案表格...">
+                            <button onclick="pickInputFile()" class="btn-picker btn-picker-fixed">选择...</button>
+                        </div>
+                    </div>
+
+                    <div id="google-input-group" class="library-group" style="display: none;">
+                        <div class="input-field-row">
+                            <label>谷歌待比对表格链接 (Google Sheets URL):</label>
+                            <div class="file-picker-row">
+                                <input type="text" id="google-input-url" placeholder="https://docs.google.com/spreadsheets/d/..." onchange="saveCurrentSettings()">
+                                <button onclick="verifyAndLoadInputSheets()" class="btn-picker btn-picker-fixed">⚡ 刷新</button>
+                            </div>
+                        </div>
+                        <div class="input-field-row">
+                            <label>子工作表名称 (可选择):</label>
+                            <div class="file-picker-row">
+                                <select id="google-input-name-select" onchange="onGoogleInputNameSelectChange()">
+                                    <option value="">第一张工作表 (默认)</option>
+                                </select>
+                                <div class="field-spacer-fixed"></div>
+                            </div>
+                        </div>
+                        <button id="btn-verify-input-google" onclick="verifyAndLoadInputSheets()" class="btn-picker btn-small" style="margin-top: 10px; width: 100%; height: 34px; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.3); color: var(--text-primary); font-weight: 500; border-radius: 8px;">🔍 验证待比对连接 & 载入列名</button>
                     </div>
                 </div>
 
                 <div class="card-section">
-                    <h3>2. 待比对文案表格</h3>
-                    <div class="file-picker-row">
-                        <input type="text" id="input-path" readonly placeholder="请选择新文案表格...">
-                        <button onclick="pickInputFile()" class="btn-picker">选择文件...</button>
+                    <h3>2.1 列匹配与前缀配置</h3>
+                    <div class="col-prefix-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 8px;">
+                        <div>
+                            <label>读取文案列:</label>
+                            <select id="column-select" disabled>
+                                <option>第一列 (默认)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>编号写入列:</label>
+                            <select id="column-write-select" disabled onchange="saveCurrentSettings()">
+                                <option value="NEW_COL">新建 '分配编号' 列</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <label>分配编号前缀:</label>
+                        <input type="text" id="prefix-input" value="CPY_" placeholder="CPY_" onchange="saveCurrentSettings()">
+                    </div>
+                    <!-- 翻译配置已独立为弹窗，在主流程比对时仍可选择是否翻译 -->
+                    <div>
+                        <label>🌐 主流程跨语言翻译 (可选，与比对同步运行):</label>
+                        <select id="translate-mode" onchange="saveCurrentSettings()" style="width: 100%; height: 34px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0 8px; outline: none; margin-top: 4px; cursor: pointer;">
+                            <option value="none">不启用翻译 (直接比对与分类)</option>
+                            <option value="en">统一翻译为英语比对与分类 (推荐 - 匹配最准)</option>
+                            <option value="pl">统一翻译为波兰语比对与分类</option>
+                        </select>
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+                            <label style="white-space: nowrap; margin: 0; font-size: 13px; color: var(--text-secondary);">翻译专用模型:</label>
+                            <select id="translate-model" onchange="saveCurrentSettings()" style="flex: 1; height: 32px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0 8px; outline: none; cursor: pointer; font-size: 13px;">
+                                <option value="gemini-2.5-flash">gemini-2.5-flash ⚡ (推荐，翻译速度快)</option>
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                                <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+                                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (慢，不推荐用于翻译)</option>
+                            </select>
+                        </div>
+                        <p style="margin: 4px 0 0 0; font-size: 11px; color: var(--text-secondary); opacity: 0.8;">⚠️ 翻译建议用 Flash 模型，Pro 模型翻译响应慢容易超时断连。</p>
                     </div>
                 </div>
 
-                <div class="card-section col-prefix-grid">
-                    <div>
-                        <label>文案内容列:</label>
-                        <select id="column-select" disabled>
-                            <option>第一列 (默认)</option>
-                        </select>
+                <!-- Section 2.2: AI Classification Config -->
+                <div class="card-section">
+                    <h3>🤖 AI 智能分类配置 (可选)</h3>
+                    <div style="display: flex; align-items: center; margin-bottom: 12px; gap: 8px;">
+                        <input type="checkbox" id="ai-classify-enable" onchange="toggleAiClassifyEnabled(); saveCurrentSettings();" style="width: 16px; height: 16px; cursor: pointer;">
+                        <label for="ai-classify-enable" style="margin: 0; font-weight: 500; cursor: pointer; user-select: none;">启用 AI 智能分类</label>
                     </div>
-                    <div>
-                        <label>分配编号前缀:</label>
-                        <input type="text" id="prefix-input" value="CPY_" placeholder="CPY_" onchange="saveCurrentSettings()">
+
+                    <div id="ai-classify-details" style="display: none;">
+                        <div class="input-field-row">
+                            <label>读取文案列 (待分类):</label>
+                            <div class="file-picker-row">
+                                <select id="ai-column-select" disabled onchange="saveCurrentSettings()">
+                                    <option>第一列 (默认)</option>
+                                </select>
+                                <div class="field-spacer-fixed"></div>
+                            </div>
+                        </div>
+
+                        <div class="input-field-row">
+                            <label>AI 密钥 (Gemini / Vertex API Key):</label>
+                            <div class="file-picker-row">
+                                <input type="text" id="ai-api-key" placeholder="例如: AQ.Ab8RN6L..." onchange="saveCurrentSettings()">
+                                <div class="field-spacer-fixed"></div>
+                            </div>
+                        </div>
+
+                        <div class="input-field-row">
+                            <label>AI 接口平台 (API Platform):</label>
+                            <div class="file-picker-row">
+                                <select id="ai-platform" onchange="onAiPlatformChange(); saveCurrentSettings();">
+                                    <option value="google-ai-studio">Google AI Studio (Gemini 官方 API)</option>
+                                    <option value="vertex-ai">Gemini Enterprise / Vertex AI (Google Cloud 平台)</option>
+                                </select>
+                                <div class="field-spacer-fixed"></div>
+                            </div>
+                        </div>
+
+                        <div class="input-field-row">
+                            <label>大模型选择 (Model):</label>
+                            <div class="file-picker-row">
+                                <select id="ai-model" onchange="onAiModelChange(); saveCurrentSettings()">
+                                    <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (GA·Lite ⚡ 默认)</option>
+                                    <option value="gemini-3.5-flash">gemini-3.5-flash (GA·最新旗舰)</option>
+                                    <option value="gemini-2.5-flash">gemini-2.5-flash (GA·快速)</option>
+                                    <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (GA·最快最省)</option>
+                                    <option value="gemini-2.5-pro">gemini-2.5-pro (GA·强推理)</option>
+                                    <option value="gemini-3-flash-preview">gemini-3-flash-preview (Preview)</option>
+                                    <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (Preview·最新)</option>
+                                    <option value="gemma-4-31b-it">Gemma 4 31B (Dense·256K·30RPM)</option>
+                                    <option value="gemma-4-26b-moe-it">Gemma 4 26B MoE (256K·30RPM)</option>
+                                </select>
+                                <div class="field-spacer-fixed"></div>
+                            </div>
+                        </div>
+
+                        <div class="input-field-row" style="margin-top: 2px;">
+                            <button id="btn-test-connection" onclick="testAiConnection()" class="btn-picker" style="width: calc(100% - 84px); height: 34px; background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.3); color: var(--text-primary); border-radius: 8px; font-weight: 500; font-size: 11px;">🧪 测试 AI 接口连接 (查看日志)</button>
+                            <div class="field-spacer-fixed"></div>
+                        </div>
+
+                        <div class="col-prefix-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 14px;">
+                            <div>
+                                <label>每批发送文案数:</label>
+                                <input type="number" id="ai-batch-size" value="100" min="1" max="500" onchange="saveCurrentSettings()" style="width: 100%; height: 38px; padding: 0 12px; border-radius: 10px; background: var(--input-bg); border: 1px solid rgba(var(--border-rgb), 0.1); color: var(--text-primary); outline: none;">
+                            </div>
+                            <div>
+                                <label>并发发送批数:</label>
+                                <input type="number" id="ai-concurrency" value="3" min="1" max="10" onchange="saveCurrentSettings()" style="width: 100%; height: 38px; padding: 0 12px; border-radius: 10px; background: var(--input-bg); border: 1px solid rgba(var(--border-rgb), 0.1); color: var(--text-primary); outline: none;">
+                            </div>
+                        </div>
+
+                        <div class="input-field-row">
+                            <label>写入分类结果列名:</label>
+                            <div class="file-picker-row">
+                                <input type="text" id="ai-col-name" placeholder="AI分类" value="AI分类" onchange="saveCurrentSettings()">
+                                <div class="field-spacer-fixed"></div>
+                            </div>
+                        </div>
+
+                        <div class="input-field-row">
+                            <label>分类指令与规则 (支持直接修改):</label>
+                            <textarea id="ai-rules" rows="12" style="width: 100%; padding: 10px; border-radius: 10px; font-size: 11px; background: var(--input-bg); border: 1px solid rgba(var(--border-rgb), 0.1); color: var(--text-primary); outline: none; font-family: inherit; resize: vertical;" onchange="saveCurrentSettings()"></textarea>
+                        </div>
                     </div>
                 </div>
 
@@ -106,7 +314,10 @@
                 </div>
             </div>
 
-            <button id="btn-run" class="btn-primary" onclick="startProcessing()">🚀 开始比对处理</button>
+            <!-- 翻译按钮 + 匹配/AI分类按钮 三按钮区 -->
+            <button id="btn-translate" class="btn-translate" onclick="openTranslateModal()" style="margin-bottom: 10px;">🌐 单独翻译到一列</button>
+            <button id="btn-run" class="btn-primary" onclick="startProcessing()" style="margin-bottom: 10px;">🚀 开始查重匹配编号</button>
+            <button id="btn-ai-run" class="btn-accent" onclick="startAiClassification()" style="background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); border-color: rgba(168, 85, 247, 0.4); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); width: 100%; height: 42px; border-radius: 12px; font-weight: 700; color: white; font-size: 13px; border: 1px solid rgba(255,255,255,0.15); box-shadow: var(--shadow-sm); cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 15px;">🤖 开始 AI 智能分类</button>
         </aside>
 
         <!-- Main Panel -->
@@ -158,12 +369,100 @@
                 </table>
             </section>
 
+            <!-- 日志控制台 -->
+            <section class="log-container" id="log-container">
+                <div class="log-header" onclick="toggleLogPanel()">
+                    <span class="log-title">📋 运行与连接日志</span>
+                    <div class="log-actions">
+                        <button class="btn-log-action" onclick="clearLogs(event)">🧹 清空</button>
+                        <span class="log-toggle-icon" id="log-toggle-icon">▲</span>
+                    </div>
+                </div>
+                <div class="log-content" id="log-content">
+                    <div class="log-line system">[系统] 日志控制台已就绪。</div>
+                </div>
+            </section>
+
             <!-- Bottom status -->
             <footer class="footer-bar">
                 <span id="output-filepath"></span>
                 <button id="btn-open-folder" class="btn-secondary" onclick="openOutputFolder()" disabled>📂 打开输出文件夹</button>
             </footer>
         </main>
+    </div>
+
+    <!-- ==================== 翻译弹窗 Modal ==================== -->
+    <div id="translate-modal-overlay" class="modal-overlay" onclick="closeTranslateModalOnBg(event)">
+        <div class="modal-box" id="translate-modal">
+            <div class="modal-header">
+                <span class="modal-title">🌐 独立批量翻译</span>
+                <button class="modal-close-btn" onclick="closeTranslateModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc">将表格中的文案翻译后写入新列，翻译完成再执行匹配编号与 AI 分类。</p>
+
+                <div class="modal-field-row">
+                    <label>读取文案列 (翻译源):</label>
+                    <select id="trans-col-select" style="width:100%; height:34px; border-radius:8px; background:var(--input-bg); color:var(--text-primary); border:1px solid rgba(var(--border-rgb),0.15); padding:0 8px; outline:none;">
+                        <option value="">第一列 (默认)</option>
+                    </select>
+                </div>
+
+                <div class="modal-field-row">
+                    <label>目标语言:</label>
+                    <select id="trans-target-lang" onchange="saveCurrentSettings()" style="width:100%; height:34px; border-radius:8px; background:var(--input-bg); color:var(--text-primary); border:1px solid rgba(var(--border-rgb),0.15); padding:0 8px; outline:none; cursor:pointer;">
+                        <option value="en">翻译为英语 (English) ⚡ 推荐</option>
+                        <option value="pl">翻译为波兰语 (Polish)</option>
+                    </select>
+                </div>
+
+                <div class="modal-field-row">
+                    <label>翻译写入列名 (会新建或覆盖此列):</label>
+                    <input type="text" id="trans-output-col" value="翻译英文" placeholder="翻译英文" style="width:100%; height:34px; border-radius:8px; background:var(--input-bg); color:var(--text-primary); border:1px solid rgba(var(--border-rgb),0.15); padding:0 12px; outline:none;">
+                </div>
+
+                <div class="modal-field-row">
+                    <label>AI API Key (Gemini):</label>
+                    <input type="text" id="trans-api-key" placeholder="例如: AIza..." style="width:100%; height:34px; border-radius:8px; background:var(--input-bg); color:var(--text-primary); border:1px solid rgba(var(--border-rgb),0.15); padding:0 12px; outline:none;">
+                </div>
+
+                <div class="modal-field-row">
+                    <label>AI 接口平台:</label>
+                    <select id="trans-platform" style="width:100%; height:34px; border-radius:8px; background:var(--input-bg); color:var(--text-primary); border:1px solid rgba(var(--border-rgb),0.15); padding:0 8px; outline:none; cursor:pointer;">
+                        <option value="google-ai-studio">Google AI Studio (Gemini 官方 API)</option>
+                        <option value="vertex-ai">Gemini Enterprise / Vertex AI</option>
+                    </select>
+                </div>
+
+                <div class="modal-field-row">
+                    <label>翻译模型:</label>
+                    <select id="trans-model" style="width:100%; height:34px; border-radius:8px; background:var(--input-bg); color:var(--text-primary); border:1px solid rgba(var(--border-rgb),0.15); padding:0 8px; outline:none; cursor:pointer;">
+                        <option value="gemini-2.5-flash">gemini-2.5-flash ⚡ (推荐，翻译速度快)</option>
+                        <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                        <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                        <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+                        <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (慢，不推荐)</option>
+                    </select>
+                </div>
+
+                <div style="display:flex; gap:12px; margin-top:4px;">
+                    <div style="flex:1;">
+                        <label style="font-size:12px; color:var(--text-secondary); margin-bottom:4px; display:block;">每批发送条数:</label>
+                        <input type="number" id="trans-batch-size" value="30" min="1" max="50" style="width:100%; height:34px; border-radius:8px; background:var(--input-bg); color:var(--text-primary); border:1px solid rgba(var(--border-rgb),0.15); padding:0 12px; outline:none;">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:12px; color:var(--text-secondary); margin-bottom:4px; display:block;">并发批数:</label>
+                        <input type="number" id="trans-concurrency" value="3" min="1" max="10" style="width:100%; height:34px; border-radius:8px; background:var(--input-bg); color:var(--text-primary); border:1px solid rgba(var(--border-rgb),0.15); padding:0 12px; outline:none;">
+                    </div>
+                </div>
+
+                <p style="margin-top:12px; font-size:11px; color:var(--text-secondary); opacity:0.8; line-height:1.5;">⚠️ 翻译建议每批不超过 50 条，Flash 系列模型速度快、稳定性好。翻译完成后文件会自动保存，然后可在主界面点击【🚀 开始查重匹配编号】或【🤖 AI 智能分类】继续处理。</p>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn-cancel" onclick="closeTranslateModal()">取消</button>
+                <button class="modal-btn-confirm" id="btn-modal-translate" onclick="startTranslation()">🌐 开始翻译</button>
+            </div>
+        </div>
     </div>
 
     <script src="main.js"></script>

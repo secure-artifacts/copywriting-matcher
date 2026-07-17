@@ -151,8 +151,8 @@ html, body {
 
 /* ------------------ 左侧栏样式 ------------------ */
 .sidebar {
-    width: 380px;
-    min-width: 380px;
+    width: 420px;
+    min-width: 420px;
     display: flex;
     flex-direction: column;
     padding: 22px;
@@ -589,3 +589,359 @@ input[type="range"]::-webkit-slider-thumb:hover {
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* ==================== 选项卡与谷歌表格样式 ==================== */
+.library-type-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    background: rgba(0, 0, 0, 0.15);
+    padding: 3px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--border-rgb), 0.05);
+}
+
+.tab-btn {
+    flex: 1;
+    height: 30px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(var(--border-rgb), 0.05);
+}
+
+.tab-btn.active {
+    color: #ffffff;
+    background: var(--accent-color);
+    box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.library-group {
+    transition: all 0.3s ease;
+}
+
+.input-field-row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 14px;
+}
+
+.input-field-row:last-child {
+    margin-bottom: 0;
+}
+
+.input-field-row label {
+    margin: 8px 0 6px 0 !important;
+}
+
+/* 日志面板样式 */
+.log-container {
+    background: rgba(var(--card-bg-rgb), var(--card-opacity));
+    border: 1px solid rgba(var(--border-rgb), var(--border-opacity));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+    height: 38px; /* 默认折叠状态，只显示 header */
+}
+
+.log-container.expanded {
+    height: 180px; /* 展开状态 */
+}
+
+.log-header {
+    height: 36px;
+    padding: 0 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(var(--border-rgb), 0.03);
+    border-bottom: 1px solid rgba(var(--border-rgb), 0.05);
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.log-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-color);
+}
+
+.log-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-log-action {
+    background: rgba(var(--border-rgb), 0.05);
+    border: 1px solid rgba(var(--border-rgb), 0.1);
+    color: var(--text-secondary);
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    cursor: pointer;
+}
+
+.btn-log-action:hover {
+    background: rgba(var(--border-rgb), 0.12);
+    color: var(--text-primary);
+}
+
+.log-toggle-icon {
+    font-size: 10px;
+    color: var(--text-secondary);
+    transition: transform 0.3s ease;
+}
+
+.log-container.expanded .log-toggle-icon {
+    transform: rotate(180deg);
+}
+
+.log-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 14px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.2);
+    user-select: text;
+}
+
+.log-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.log-content::-webkit-scrollbar-thumb {
+    background: rgba(var(--border-rgb), 0.12);
+    border-radius: 3px;
+}
+
+.log-line {
+    margin-bottom: 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-line.info { color: var(--text-secondary); }
+.log-line.success { color: #10b981; }
+.log-line.warning { color: #f59e0b; }
+.log-line.error { color: #ef4444; font-weight: bold; }
+.log-line.system { color: #3b82f6; }
+
+/* =====================================================
+ * 翻译按钮 (青绿色渐变，区别于蓝色匹配和紫色AI按钮)
+ * ===================================================== */
+.btn-translate {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 42px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 13px;
+    color: white;
+    background: linear-gradient(135deg, #0ea5e9 0%, #0891b2 100%);
+    border: 1px solid rgba(14, 165, 233, 0.4);
+    box-shadow: 0 4px 15px rgba(14, 165, 233, 0.25);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.btn-translate:hover:not(:disabled) {
+    background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+    box-shadow: 0 6px 20px rgba(14, 165, 233, 0.40);
+    transform: translateY(-1px);
+}
+
+.btn-translate:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3);
+}
+
+.btn-translate:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* =====================================================
+ * 弹窗 Modal 样式
+ * ===================================================== */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    background: rgba(0, 0, 0, 0.60);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-box {
+    width: 480px;
+    max-width: 92vw;
+    max-height: 88vh;
+    border-radius: 20px;
+    background: rgba(var(--card-bg-rgb), calc(var(--card-opacity, 0.75) + 0.1));
+    border: 1px solid rgba(var(--border-rgb), 0.12);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(var(--border-rgb), 0.06);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: modalIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modalIn {
+    from { opacity: 0; transform: scale(0.88) translateY(20px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid rgba(var(--border-rgb), 0.08);
+}
+
+.modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+}
+
+.modal-close-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(var(--border-rgb), 0.08);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.modal-close-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 22px 10px;
+}
+
+.modal-body::-webkit-scrollbar { width: 6px; }
+.modal-body::-webkit-scrollbar-thumb {
+    background: rgba(var(--border-rgb), 0.10);
+    border-radius: 3px;
+}
+
+.modal-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    line-height: 1.6;
+    padding: 10px 12px;
+    background: rgba(14, 165, 233, 0.06);
+    border-left: 3px solid rgba(14, 165, 233, 0.5);
+    border-radius: 0 8px 8px 0;
+}
+
+.modal-field-row {
+    margin-bottom: 12px;
+}
+
+.modal-field-row label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    padding: 14px 22px 18px;
+    border-top: 1px solid rgba(var(--border-rgb), 0.08);
+}
+
+.modal-btn-cancel {
+    flex: 1;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--border-rgb), 0.12);
+    background: rgba(var(--border-rgb), 0.05);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.modal-btn-cancel:hover {
+    background: rgba(var(--border-rgb), 0.10);
+    color: var(--text-primary);
+}
+
+.modal-btn-confirm {
+    flex: 2;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid rgba(14, 165, 233, 0.35);
+    background: linear-gradient(135deg, #0ea5e9 0%, #0891b2 100%);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+}
+
+.modal-btn-confirm:hover:not(:disabled) {
+    background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+    box-shadow: 0 6px 18px rgba(14, 165, 233, 0.4);
+    transform: translateY(-1px);
+}
+
+.modal-btn-confirm:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.modal-btn-confirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+

@@ -7,7 +7,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 class CopywritingMatcher:
-    def __init__(self, inventory_path, id_prefix="CPY_", threshold=0.8, mode="tfidf"):
+    def __init__(self, inventory_path, id_prefix="CPY_", threshold=0.8, mode="tfidf",
+                 use_google_sheets=False, google_sheets_url="", google_sheet_name="", google_creds_path=""):
         """
         初始化文案匹配器
         :param inventory_path: 库存 Excel 或 CSV 文件路径
@@ -19,14 +20,28 @@ class CopywritingMatcher:
         self.id_prefix = id_prefix
         self.threshold = threshold
         self.mode = mode.lower()
+        
+        self.use_google_sheets = use_google_sheets
+        self.google_sheets_url = google_sheets_url
+        self.google_sheet_name = google_sheet_name
+        self.google_creds_path = google_creds_path
+        
         self.df_inventory = None
         self.model = None  # AI 语义模型，延迟加载
+        self.gc = None
+        self.sh = None
+        self.worksheet = None
+        
         self.load_inventory()
 
     def load_inventory(self):
         """
         加载文案库存，如果不存在则自动创建模板，但不会因为读取错误轻易覆盖文件
         """
+        if self.use_google_sheets:
+            self.load_google_inventory()
+            return
+
         if os.path.exists(self.inventory_path):
             try:
                 # 根据后缀加载
@@ -44,6 +59,44 @@ class CopywritingMatcher:
                 self.df_inventory = None
         else:
             self.create_empty_inventory()
+
+    def load_google_inventory(self):
+        """
+        从 Google Sheets 加载网络文案库，如果工作表是空的，则进行初始化
+        """
+        try:
+            from google.oauth2.service_account import Credentials
+            import gspread
+            
+            scopes = [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
+            ]
+            credentials = Credentials.from_service_account_file(self.google_creds_path, scopes=scopes)
+            self.gc = gspread.authorize(credentials)
+            self.sh = self.gc.open_by_url(self.google_sheets_url)
+            
+            if self.google_sheet_name:
+                self.worksheet = self.sh.worksheet(self.google_sheet_name)
+            else:
+                self.worksheet = self.sh.get_worksheet(0)
+                
+            data = self.worksheet.get_all_values()
+            if not data or len(data) == 0:
+                # 空表，创建初始结构
+                self.df_inventory = pd.DataFrame(columns=['编号', '文案内容', '入库时间', '匹配次数'])
+                # 写入表头
+                self.worksheet.update([['编号', '文案内容', '入库时间', '匹配次数']], 'A1')
+            else:
+                headers = data[0]
+                rows = data[1:]
+                self.df_inventory = pd.DataFrame(rows, columns=headers)
+                
+            if len(self.df_inventory.columns) == 0:
+                self.df_inventory = None
+        except Exception as e:
+            print(f"加载谷歌表格库存失败: {e}")
+            raise RuntimeError(f"加载谷歌表格库存失败: {e}。请检查您的 Google Sheet URL、凭证文件路径以及是否已向服务账号授权！")
 
     def create_empty_inventory(self):
         """
@@ -110,19 +163,32 @@ class CopywritingMatcher:
 
     def save_inventory(self):
         """
-        保存当前的文案库存到文件
+        保存当前的文案库存到本地文件或 Google Sheets
         """
         if self.df_inventory is None:
             return
             
-        dir_name = os.path.dirname(self.inventory_path)
-        if dir_name and not os.path.exists(dir_name):
-            os.makedirs(dir_name)
-        
-        if self.inventory_path.endswith('.csv'):
-            self.df_inventory.to_csv(self.inventory_path, index=False, encoding='utf-8-sig')
+        if self.use_google_sheets:
+            try:
+                # 填充空值并转换为字符串，确保在 gspread 中正常保存
+                df_to_save = self.df_inventory.fillna("").astype(str)
+                values = [df_to_save.columns.tolist()] + df_to_save.values.tolist()
+                
+                # 清除当前工作表，并全部重写以保持完全同步
+                self.worksheet.clear()
+                self.worksheet.update(values, 'A1')
+            except Exception as e:
+                print(f"保存谷歌表格库存失败: {e}")
+                raise RuntimeError(f"保存谷歌表格库存失败: {e}")
         else:
-            self.df_inventory.to_excel(self.inventory_path, index=False)
+            dir_name = os.path.dirname(self.inventory_path)
+            if dir_name and not os.path.exists(dir_name):
+                os.makedirs(dir_name)
+            
+            if self.inventory_path.endswith('.csv'):
+                self.df_inventory.to_csv(self.inventory_path, index=False, encoding='utf-8-sig')
+            else:
+                self.df_inventory.to_excel(self.inventory_path, index=False)
 
     def clean_text(self, text):
         """
@@ -138,7 +204,7 @@ class CopywritingMatcher:
 
     def get_next_id(self, current_max_id_str):
         """
-        根据当前最大 ID 生成下一个递增的 ID，自动保持前导零的长度
+        根据当前最大 ID 生成下一个递增 of ID，自动保持前导零的长度
         """
         match = re.search(r'\d+', current_max_id_str)
         if match:
@@ -191,7 +257,6 @@ class CopywritingMatcher:
                 progress_callback(0, 1, "正在初始化本地 AI 语义比对引擎，请稍候...")
             try:
                 from sentence_transformers import SentenceTransformer
-                # 使用微软研发并开源的多语言模型，该模型非常适合同义词句式转换和错别字
                 self.model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
             except ImportError:
                 raise ImportError("未检测到 AI 语义比对所需的底层依赖库 (sentence-transformers 或 PyTorch)。请先在系统设置中完成安装！")
@@ -200,11 +265,9 @@ class CopywritingMatcher:
 
     def process_batch(self, df_input, target_col='文案内容', progress_callback=None):
         """
-        批量处理新文案，进行相似度比对并分配编号
-        :param df_input: 输入的 pd.DataFrame 或者是文本列表 (为了兼容测试)
-        :param target_col: 要比对的文案列名
-        :param progress_callback: 进度回调
-        :return: 包含处理结果 of dict 列表
+        批量处理新文案的比对，并分配编号入库
+        df_input: 输入的文案 DataFrame 或字符串列表
+        target_col: 需要进行比对的外语/中文原文字段名称
         """
         # 兼容性处理：如果传入的是列表，转换为 DataFrame
         if not isinstance(df_input, pd.DataFrame):
@@ -237,11 +300,22 @@ class CopywritingMatcher:
         if '匹配次数' not in inv_cols:
             self.df_inventory['匹配次数'] = ""
 
+        # 确保结果相关的所有列在库存结构中存在
+        inventory_result_cols = ['翻译英文', 'AI分类', '匹配状态', '相似度', '最相似文案']
+        for col in inventory_result_cols:
+            if col not in self.df_inventory.columns:
+                self.df_inventory[col] = ""
+
+        # 将 df_input 中存在但库存中没有的列动态增加到库存列结构中
+        for col in df_input.columns:
+            if col not in self.df_inventory.columns and col not in ['匹配状态', '相似度', '最相似文案']:
+                self.df_inventory[col] = ""
+
         # 清洗/规整库存数据格式
         self.df_inventory[id_col] = self.df_inventory[id_col].fillna("").astype(str)
         self.df_inventory[text_col] = self.df_inventory[text_col].fillna("").astype(str)
         self.df_inventory['匹配次数'] = pd.to_numeric(self.df_inventory['匹配次数'], errors='coerce').fillna(1).astype(int)
-        self.df_inventory['入库时间'] = self.df_inventory['入库时间'].fillna(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        self.df_inventory['入库时间'] = self.df_inventory['入库时间'].replace("", np.nan).fillna(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
         # 如果是语义比对模式，先初始化模型
         if self.mode == "semantic":
@@ -319,7 +393,6 @@ class CopywritingMatcher:
                     )
                     vectorizer.fit(all_corpus)
                     if active_original_texts:
-                        # 过滤掉空的库存原句
                         valid_active_texts = [t for t in active_original_texts if t and str(t).strip() and str(t).lower() != 'nan']
                         if valid_active_texts:
                             tfidf_matrix_active = vectorizer.transform(active_original_texts)
@@ -354,11 +427,22 @@ class CopywritingMatcher:
                     '分配编号': "N/A",
                     '匹配状态': "空文本",
                     '相似度': "0.0%",
-                    '最相似文案': ""
+                    '最相似文案': "",
+                    '入库时间': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    '翻译英文': "",
+                    'AI分类': ""
                 })
                 continue
                 
             orig_text_str = str(orig_text)
+            assigned_id = ""
+            match_status = ""
+            similarity = "0.0%"
+            most_similar_text = ""
+            stock_in_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            matched_trans = ""
+            matched_ai_class = ""
+            current_match_count = 1
 
             # A. 快速匹配：是否在当前库存中有完全一样的文案
             if clean_new in clean_text_to_id:
@@ -366,154 +450,183 @@ class CopywritingMatcher:
                 matched_idx = active_ids.index(matched_id)
                 matched_orig = active_original_texts[matched_idx]
                 
-                # 增加匹配次数
+                assigned_id = matched_id
+                match_status = "已存在 (完全匹配)"
+                similarity = "100.0%"
+                most_similar_text = matched_orig
+                
+                # 增加匹配次数，并获取已有翻译和分类
                 if matched_orig in text_to_df_index:
                     df_idx = text_to_df_index[matched_orig]
                     self.df_inventory.at[df_idx, '匹配次数'] += 1
+                    current_match_count = int(self.df_inventory.at[df_idx, '匹配次数'])
+                    stock_in_time = str(self.df_inventory.at[df_idx, '入库时间'])
+                    if '翻译英文' in self.df_inventory.columns:
+                        val = str(self.df_inventory.at[df_idx, '翻译英文']).strip()
+                        matched_trans = val if val.lower() != 'nan' else ""
+                    if 'AI分类' in self.df_inventory.columns:
+                        val = str(self.df_inventory.at[df_idx, 'AI分类']).strip()
+                        matched_ai_class = val if val.lower() != 'nan' else ""
                 else:
                     for item in inventory_updates_to_make:
                         if item[id_col] == matched_id:
                             item['匹配次数'] += 1
+                            current_match_count = item['匹配次数']
+                            if '入库时间' in item:
+                                stock_in_time = item['入库时间']
+                            if '翻译英文' in item:
+                                matched_trans = str(item['翻译英文']).strip()
+                            if 'AI分类' in item:
+                                matched_ai_class = str(item['AI分类']).strip()
                             break
-                            
-                results.append({
-                    '文案内容': orig_text_str,
-                    '分配编号': matched_id,
-                    '匹配状态': "已存在 (完全匹配)",
-                    '相似度': "100.0%",
-                    '最相似文案': matched_orig
-                })
-                continue
+
+            else:
+                # B. 模糊相似度比对
+                max_sim = 0.0
+                best_idx = -1
                 
-            # B. 模糊相似度比对
-            max_sim = 0.0
-            best_idx = -1
-            
-            # 过滤出有实际内容的 active_original_texts 的索引，避免匹配到库中的空行
-            valid_active_indices = [idx for idx, t in enumerate(active_original_texts) if t and str(t).strip() and str(t).lower() != 'nan']
-            
-            if len(valid_active_indices) > 0:
-                if self.mode == "tfidf":
-                    if use_tfidf and vectorizer is not None:
-                        vec_new = vectorizer.transform([orig_text_str])
-                        if tfidf_matrix_active is not None and tfidf_matrix_active.shape[0] > 0:
-                            sims = cosine_similarity(vec_new, tfidf_matrix_active)[0]
+                # 过滤出有实际内容的 active_original_texts 的索引，避免匹配到库中的空行
+                valid_active_indices = [idx for idx, t in enumerate(active_original_texts) if t and str(t).strip() and str(t).lower() != 'nan']
+                
+                if len(valid_active_indices) > 0:
+                    if self.mode == "tfidf":
+                        if use_tfidf and vectorizer is not None:
+                            vec_new = vectorizer.transform([orig_text_str])
+                            if tfidf_matrix_active is not None and tfidf_matrix_active.shape[0] > 0:
+                                sims = cosine_similarity(vec_new, tfidf_matrix_active)[0]
+                                best_idx = valid_active_indices[0]
+                                max_sim = sims[best_idx]
+                                for idx_inv in valid_active_indices:
+                                    if sims[idx_inv] > max_sim:
+                                        max_sim = sims[idx_inv]
+                                        best_idx = idx_inv
+                        else:
+                            for idx_inv in valid_active_indices:
+                                sim = self.fallback_similarity(clean_new, active_clean_texts[idx_inv])
+                                if sim > max_sim:
+                                    max_sim = sim
+                                    best_idx = idx_inv
+                    elif self.mode == "semantic":
+                        vec_new = self.model.encode([clean_new], normalize_embeddings=True, show_progress_bar=False)
+                        if semantic_embeddings_active is not None and len(semantic_embeddings_active) > 0:
+                            sims = cosine_similarity(vec_new, semantic_embeddings_active)[0]
                             best_idx = valid_active_indices[0]
                             max_sim = sims[best_idx]
                             for idx_inv in valid_active_indices:
                                 if sims[idx_inv] > max_sim:
                                     max_sim = sims[idx_inv]
                                     best_idx = idx_inv
-                    else:
-                        for idx_inv in valid_active_indices:
-                            sim = self.fallback_similarity(clean_new, active_clean_texts[idx_inv])
-                            if sim > max_sim:
-                                max_sim = sim
-                                best_idx = idx_inv
-                                
-                elif self.mode == "semantic":
-                    vec_new = self.model.encode([clean_new], normalize_embeddings=True, show_progress_bar=False)[0]
-                    if semantic_embeddings_active is not None and len(semantic_embeddings_active) > 0:
-                        sims = np.dot(semantic_embeddings_active, vec_new)
-                        best_idx = valid_active_indices[0]
-                        max_sim = sims[best_idx]
-                        for idx_inv in valid_active_indices:
-                            if sims[idx_inv] > max_sim:
-                                max_sim = sims[idx_inv]
-                                best_idx = idx_inv
-            
-            # C. 判定相似度是否高于设定的阈值
-            if max_sim >= self.threshold and best_idx != -1:
-                # 匹配成功，沿用已有 ID
-                matched_id = active_ids[best_idx]
-                matched_orig = active_original_texts[best_idx]
                 
-                # 如果已有的 ID 为空，说明数据库里这行数据此前没有分配编号，我们为它生成一个新编号！
-                if not matched_id or matched_id == "nan" or not str(matched_id).strip():
-                    new_id = self.get_next_id(current_max_id)
-                    current_max_id = new_id
-                    matched_id = new_id
-                    active_ids[best_idx] = new_id
+                # C. 相似度阈值处理
+                if max_sim >= self.threshold:
+                    matched_orig = active_original_texts[best_idx]
+                    matched_id = active_ids[best_idx]
                     
+                    assigned_id = matched_id
+                    match_status = "已存在 (模糊匹配)" if self.mode == "tfidf" else "已存在 (AI语义匹配)"
+                    similarity = f"{max_sim * 100:.1f}%"
+                    most_similar_text = matched_orig
+                    
+                    # 增加匹配次数，并获取已有翻译和分类
                     if matched_orig in text_to_df_index:
                         df_idx = text_to_df_index[matched_orig]
-                        self.df_inventory.at[df_idx, id_col] = new_id
-
-                # 更新匹配次数
-                if matched_orig in text_to_df_index:
-                    df_idx = text_to_df_index[matched_orig]
-                    self.df_inventory.at[df_idx, '匹配次数'] += 1
+                        self.df_inventory.at[df_idx, '匹配次数'] += 1
+                        current_match_count = int(self.df_inventory.at[df_idx, '匹配次数'])
+                        stock_in_time = str(self.df_inventory.at[df_idx, '入库时间'])
+                        if '翻译英文' in self.df_inventory.columns:
+                            val = str(self.df_inventory.at[df_idx, '翻译英文']).strip()
+                            matched_trans = val if val.lower() != 'nan' else ""
+                        if 'AI分类' in self.df_inventory.columns:
+                            val = str(self.df_inventory.at[df_idx, 'AI分类']).strip()
+                            matched_ai_class = val if val.lower() != 'nan' else ""
+                    else:
+                        for item in inventory_updates_to_make:
+                            if item[id_col] == matched_id:
+                                item['匹配次数'] += 1
+                                current_match_count = item['匹配次数']
+                                if '入库时间' in item:
+                                    stock_in_time = item['入库时间']
+                                if '翻译英文' in item:
+                                    matched_trans = str(item['翻译英文']).strip()
+                                if 'AI分类' in item:
+                                    matched_ai_class = str(item['AI分类']).strip()
+                                break
+                    
+                    # 记录快速查重映射
+                    clean_text_to_id[clean_new] = matched_id
                 else:
-                    for item in inventory_updates_to_make:
-                        if item[id_col] == matched_id:
-                            item['匹配次数'] += 1
-                            break
-                            
-                # 记录快速查重映射
-                clean_text_to_id[clean_new] = matched_id
-                
-                results.append({
-                    '文案内容': orig_text_str,
-                    '分配编号': matched_id,
-                    '匹配状态': "已存在 (模糊匹配)" if self.mode == "tfidf" else "已存在 (AI语义匹配)",
-                    '相似度': f"{max_sim * 100:.1f}%",
-                    '最相似文案': matched_orig
-                })
-            else:
-                # D. 匹配不成功，分配新 ID 并动态追加至比对矩阵中
-                new_id = self.get_next_id(current_max_id)
-                current_max_id = new_id
-                
-                active_original_texts.append(orig_text_str)
-                active_clean_texts.append(clean_new)
-                active_ids.append(new_id)
-                clean_text_to_id[clean_new] = new_id
-                
-                # 动态追加新的比对向量
-                if self.mode == "tfidf":
-                    if use_tfidf and vectorizer is not None:
-                        vec_new = vectorizer.transform([orig_text_str])
-                        import scipy.sparse as sp
-                        if tfidf_matrix_active is not None:
-                            tfidf_matrix_active = sp.vstack([tfidf_matrix_active, vec_new])
+                    # D. 匹配不成功，分配新 ID 并动态追加至比对集合中
+                    new_id = self.get_next_id(current_max_id)
+                    current_max_id = new_id
+                    
+                    assigned_id = new_id
+                    match_status = "新文案"
+                    similarity = "0.0%"
+                    most_similar_text = ""
+                    
+                    active_original_texts.append(orig_text_str)
+                    active_clean_texts.append(clean_new)
+                    active_ids.append(new_id)
+                    clean_text_to_id[clean_new] = new_id
+                    
+                    # 动态追加新的比对向量
+                    if self.mode == "tfidf":
+                        if use_tfidf and vectorizer is not None:
+                            vec_new = vectorizer.transform([orig_text_str])
+                            import scipy.sparse as sp
+                            if tfidf_matrix_active is not None:
+                                tfidf_matrix_active = sp.vstack([tfidf_matrix_active, vec_new])
+                            else:
+                                tfidf_matrix_active = vec_new
+                    elif self.mode == "semantic":
+                        vec_new = self.model.encode([clean_new], normalize_embeddings=True, show_progress_bar=False)
+                        if semantic_embeddings_active is not None and len(semantic_embeddings_active) > 0:
+                            semantic_embeddings_active = np.vstack([semantic_embeddings_active, vec_new])
                         else:
-                            tfidf_matrix_active = vec_new
-                elif self.mode == "semantic":
-                    vec_new = self.model.encode([clean_new], normalize_embeddings=True, show_progress_bar=False)
-                    if semantic_embeddings_active is not None and len(semantic_embeddings_active) > 0:
-                        semantic_embeddings_active = np.vstack([semantic_embeddings_active, vec_new])
+                            semantic_embeddings_active = vec_new
+            
+            # E. 构造并记录需要写入库存的行（不论是新文案，还是已存在匹配文案，均写入库存）
+            input_row = df_input.iloc[i]
+            new_item = {}
+            for col in self.df_inventory.columns:
+                if col == id_col:
+                    new_item[id_col] = assigned_id
+                elif col == '入库时间':
+                    new_item['入库时间'] = stock_in_time
+                elif col == '匹配次数':
+                    new_item['匹配次数'] = current_match_count
+                elif col == '翻译英文':
+                    new_item['翻译英文'] = matched_trans
+                elif col == 'AI分类':
+                    new_item['AI分类'] = matched_ai_class
+                elif col == '匹配状态':
+                    new_item['匹配状态'] = match_status
+                elif col == '相似度':
+                    new_item['相似度'] = similarity
+                elif col == '最相似文案':
+                    new_item['最相似文案'] = most_similar_text
+                else:
+                    if col in input_row:
+                        val = input_row[col]
+                        if pd.isna(val):
+                            val = ""
+                        new_item[col] = val
                     else:
-                        semantic_embeddings_active = vec_new
-                
-                # 记录需保存的新库存（完全保留输入行的所有列值）
-                input_row = df_input.iloc[i]
-                new_item = {}
-                for col in self.df_inventory.columns:
-                    if col == id_col:
-                        new_item[id_col] = new_id
-                    elif col == '入库时间':
-                        new_item['入库时间'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    elif col == '匹配次数':
-                        new_item['匹配次数'] = 1
-                    else:
-                        if col in input_row:
-                            val = input_row[col]
-                            if pd.isna(val):
-                                val = ""
-                            new_item[col] = val
-                        else:
-                            new_item[col] = ""
-                
-                inventory_updates_to_make.append(new_item)
-                
-                results.append({
-                    '文案内容': orig_text_str,
-                    '分配编号': new_id,
-                    '匹配状态': "新文案",
-                    '相似度': "0.0%",
-                    '最相似文案': ""
-                })
-                
+                        new_item[col] = ""
+            
+            inventory_updates_to_make.append(new_item)
+            
+            results.append({
+                '文案内容': orig_text_str,
+                '分配编号': assigned_id,
+                '匹配状态': match_status,
+                '相似度': similarity,
+                '最相似文案': most_similar_text,
+                '入库时间': stock_in_time,
+                '翻译英文': matched_trans,
+                'AI分类': matched_ai_class
+            })
+            
         # E. 保存并合并新增库存
         if inventory_updates_to_make:
             df_new_items = pd.DataFrame(inventory_updates_to_make)
