@@ -1,6 +1,12 @@
 # 爆贴文案查重与库存管理系统
 
-AI 语义查重 & 智能编号系统。
+[![GitHub Release](https://img.shields.io/github/v/release/secure-artifacts/copywriting-matcher?label=最新版本)](https://github.com/secure-artifacts/copywriting-matcher/releases/latest)
+[![Build Status](https://github.com/secure-artifacts/copywriting-matcher/actions/workflows/release.yml/badge.svg)](https://github.com/secure-artifacts/copywriting-matcher/actions)
+
+AI 语义查重 & 智能编号系统 | 文案批量匹配与库存管理工具。
+
+**[⬇️ 下载最新版本 (Windows)](https://github.com/secure-artifacts/copywriting-matcher/releases/latest)**
+
 
 ## 如何发布新版本
 
